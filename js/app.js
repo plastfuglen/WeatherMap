@@ -246,10 +246,22 @@
         var cls = rounded >= 0 ? "warm" : "cold";
         html += '<span class="wx-temp ' + cls + '">' + rounded + '°</span>';
       }
+
+      // Vindpil: peker dit vinden blåser (wind_from_direction er hvor den
+      // kommer fra; ➤ peker mot øst, dvs. 90° kompass)
+      var inst = step.data.instant.details || {};
+      if (typeof inst.wind_speed === "number" &&
+          typeof inst.wind_from_direction === "number" &&
+          inst.wind_speed >= 0.5) {
+        var rot = Math.round(inst.wind_from_direction + 90);
+        html += '<span class="wx-wind">' +
+                '<span class="wx-arrow" style="transform:rotate(' + rot + 'deg)">➤</span>' +
+                Math.round(inst.wind_speed) + '</span>';
+      }
       html += "</div>";
 
       L.marker([p.lat, p.lon], {
-        icon: L.divIcon({ className: "wx-marker", html: html, iconSize: [44, 56], iconAnchor: [22, 28] }),
+        icon: L.divIcon({ className: "wx-marker", html: html, iconSize: [44, 66], iconAnchor: [22, 33] }),
         interactive: false,
         keyboard: false
       }).addTo(markerLayer);
@@ -386,13 +398,37 @@
   var detailPanel = document.getElementById("detail-panel");
   var detailTitle = document.getElementById("detail-title");
   var detailBody = document.getElementById("detail-body");
+  var selectedMarker = null;
+
+  function setSelectedMarker(lat, lon) {
+    clearSelectedMarker();
+    selectedMarker = L.marker([lat, lon], {
+      icon: L.divIcon({
+        className: "loc-marker",
+        html: '<div class="loc-pulse"></div><div class="loc-pin"></div>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      }),
+      interactive: false,
+      keyboard: false
+    }).addTo(map);
+  }
+
+  function clearSelectedMarker() {
+    if (selectedMarker) {
+      map.removeLayer(selectedMarker);
+      selectedMarker = null;
+    }
+  }
 
   document.getElementById("detail-close").addEventListener("click", function () {
     detailPanel.hidden = true;
+    clearSelectedMarker();
   });
 
   function openDetail(lat, lon, knownName) {
     detailPanel.hidden = false;
+    setSelectedMarker(lat, lon);
     detailTitle.textContent = knownName || lat.toFixed(3) + "°, " + lon.toFixed(3) + "°";
     detailBody.innerHTML = '<p class="muted">Laster varsel …</p>';
 
@@ -433,11 +469,204 @@
     return '<span class="' + (r >= 0 ? "t-warm" : "t-cold") + '">' + r + "°</span>";
   }
 
+  // ---- Meteogram: temperaturlinje + nedbørssøyler for de neste 48 timene.
+  // To stablede paneler med felles tidsakse (aldri dobbel y-akse).
+
+  var MET_W = 360, MET_H = 190;
+  var MET_L = 26, MET_R = 8;          // venstre/høyre marg
+  var TEMP_TOP = 16, TEMP_BOT = 100;  // temperaturpanel
+  var PREC_TOP = 126, PREC_BOT = 168; // nedbørspanel
+
+  var TIP_FMT = new Intl.DateTimeFormat("nb-NO", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+
+  function nb(num, decimals) {
+    return num.toFixed(decimals).replace(".", ",");
+  }
+
+  function buildMeteogram(entry) {
+    var pts = [];
+    var now = Date.now();
+    for (var i = 0; i < entry.times.length && pts.length < 48; i++) {
+      var ms = entry.times[i];
+      if (ms < now - 3600e3) continue;
+      var d = entry.byTime[ms].data;
+      if (!d.next_1_hours) break;
+      var t = d.instant.details && d.instant.details.air_temperature;
+      if (typeof t !== "number") continue;
+      var det = d.next_1_hours.details;
+      pts.push({ ms: ms, t: t, p: (det && det.precipitation_amount) || 0 });
+    }
+    if (pts.length < 3) return null;
+
+    var xs = pts.map(function (_, idx) {
+      return MET_L + (MET_W - MET_L - MET_R) * idx / (pts.length - 1);
+    });
+
+    // Temperaturskala med «pene» steg
+    var tMin = Infinity, tMax = -Infinity, pMax = 0;
+    pts.forEach(function (p) {
+      if (p.t < tMin) tMin = p.t;
+      if (p.t > tMax) tMax = p.t;
+      if (p.p > pMax) pMax = p.p;
+    });
+    var span = (tMax - tMin) || 1;
+    var stepT = span <= 5 ? 2 : span <= 12 ? 3 : span <= 22 ? 5 : 10;
+    var tLo = Math.floor((tMin - 1) / stepT) * stepT;
+    var tHi = Math.ceil((tMax + 1) / stepT) * stepT;
+
+    function ty(v) {
+      return TEMP_BOT - (v - tLo) / (tHi - tLo) * (TEMP_BOT - TEMP_TOP);
+    }
+
+    var svg = "";
+
+    // Horisontale gridlinjer + verdier for temperatur
+    for (var tv = tLo; tv <= tHi; tv += stepT) {
+      var y = ty(tv).toFixed(1);
+      var cls = tv === 0 ? "meteo-zero" : "meteo-grid";
+      svg += "<line class='" + cls + "' x1='" + MET_L + "' y1='" + y +
+             "' x2='" + (MET_W - MET_R) + "' y2='" + y + "'/>";
+      svg += "<text class='meteo-label' x='" + (MET_L - 4) + "' y='" + (+y + 3) +
+             "' text-anchor='end'>" + tv + "</text>";
+    }
+
+    // Tidsakse: merker hver 6. time, vertikale hjelpelinjer gjennom begge paneler
+    for (i = 0; i < pts.length; i++) {
+      var dt = new Date(pts[i].ms);
+      if (dt.getHours() % 6 !== 0) continue;
+      var x = xs[i].toFixed(1);
+      svg += "<line class='meteo-grid' x1='" + x + "' y1='" + TEMP_TOP +
+             "' x2='" + x + "' y2='" + PREC_BOT + "'/>";
+      svg += "<text class='meteo-label' x='" + x + "' y='" + (PREC_BOT + 12) +
+             "' text-anchor='middle'>" + String(dt.getHours()).padStart(2, "0") + "</text>";
+    }
+
+    // Temperaturlinje delt i varme/kalde segmenter ved nullpunktene
+    var segs = [];
+    var cur = null, curWarm = null;
+    for (i = 0; i < pts.length; i++) {
+      var warm = pts[i].t >= 0;
+      var px = xs[i], py = ty(pts[i].t);
+      if (cur === null) {
+        cur = [px.toFixed(1) + "," + py.toFixed(1)];
+        curWarm = warm;
+        continue;
+      }
+      if (warm !== curWarm) {
+        var f = (0 - pts[i - 1].t) / (pts[i].t - pts[i - 1].t);
+        var cx = (xs[i - 1] + (px - xs[i - 1]) * f).toFixed(1);
+        var cy = ty(0).toFixed(1);
+        cur.push(cx + "," + cy);
+        segs.push({ warm: curWarm, pts: cur });
+        cur = [cx + "," + cy];
+        curWarm = warm;
+      }
+      cur.push(px.toFixed(1) + "," + py.toFixed(1));
+    }
+    segs.push({ warm: curWarm, pts: cur });
+
+    segs.forEach(function (seg) {
+      svg += "<polyline class='" + (seg.warm ? "meteo-line-warm" : "meteo-line-cold") +
+             "' points='" + seg.pts.join(" ") + "'/>";
+    });
+
+    // Direktemerk høyeste og laveste temperatur
+    var iMax = 0, iMin = 0;
+    for (i = 1; i < pts.length; i++) {
+      if (pts[i].t > pts[iMax].t) iMax = i;
+      if (pts[i].t < pts[iMin].t) iMin = i;
+    }
+    [{ i: iMax, above: true }, { i: iMin, above: false }].forEach(function (m) {
+      if (iMax === iMin && !m.above) return;
+      var p = pts[m.i];
+      var lx = Math.min(Math.max(xs[m.i], MET_L + 12), MET_W - MET_R - 12);
+      var lyv = ty(p.t) + (m.above ? -6 : 12);
+      svg += "<text class='" + (p.t >= 0 ? "meteo-extreme-warm" : "meteo-extreme-cold") +
+             "' x='" + lx.toFixed(1) + "' y='" + lyv.toFixed(1) +
+             "' text-anchor='middle'>" + nb(p.t, 0) + "°</text>";
+    });
+
+    // Nedbørspanel
+    svg += "<text class='meteo-title' x='" + MET_L + "' y='" + (TEMP_TOP - 6) + "'>Temperatur (°C)</text>";
+    svg += "<text class='meteo-title' x='" + MET_L + "' y='" + (PREC_TOP - 6) + "'>Nedbør (mm)</text>";
+    svg += "<line class='meteo-axis' x1='" + MET_L + "' y1='" + PREC_BOT +
+           "' x2='" + (MET_W - MET_R) + "' y2='" + PREC_BOT + "'/>";
+
+    var pScale = Math.max(1, Math.ceil(pMax));
+    svg += "<text class='meteo-label' x='" + (MET_L - 4) + "' y='" + (PREC_TOP + 3) +
+           "' text-anchor='end'>" + pScale + "</text>";
+    svg += "<text class='meteo-label' x='" + (MET_L - 4) + "' y='" + (PREC_BOT + 3) +
+           "' text-anchor='end'>0</text>";
+
+    var stepX = (MET_W - MET_L - MET_R) / (pts.length - 1);
+    var barW = Math.max(2, stepX * 0.62);
+    for (i = 0; i < pts.length; i++) {
+      if (pts[i].p <= 0) continue;
+      var bh = Math.max(1.5, pts[i].p / pScale * (PREC_BOT - PREC_TOP));
+      svg += "<rect class='meteo-bar' x='" + (xs[i] - barW / 2).toFixed(1) +
+             "' y='" + (PREC_BOT - bh).toFixed(1) +
+             "' width='" + barW.toFixed(1) + "' height='" + bh.toFixed(1) + "' rx='1.5'/>";
+    }
+
+    // Krysshår for hover (skjult til musa er over)
+    svg += "<line class='meteo-cross' x1='0' y1='" + TEMP_TOP + "' x2='0' y2='" +
+           PREC_BOT + "' style='display:none'/>";
+
+    var html = "<div class='meteo-wrap'>" +
+      "<svg viewBox='0 0 " + MET_W + " " + MET_H + "' role='img' " +
+      "aria-label='Temperatur og nedbør de neste 48 timene'>" + svg + "</svg>" +
+      "<div class='meteo-tip' hidden></div></div>";
+
+    return { html: html, pts: pts, xs: xs };
+  }
+
+  function attachMeteoHover(mg) {
+    var wrap = detailBody.querySelector(".meteo-wrap");
+    if (!wrap || !mg) return;
+    var svgEl = wrap.querySelector("svg");
+    var tip = wrap.querySelector(".meteo-tip");
+    var cross = svgEl.querySelector(".meteo-cross");
+
+    function onMove(ev) {
+      var rect = svgEl.getBoundingClientRect();
+      var vx = (ev.clientX - rect.left) / rect.width * MET_W;
+      var best = 0, bd = Infinity;
+      for (var i = 0; i < mg.xs.length; i++) {
+        var d = Math.abs(mg.xs[i] - vx);
+        if (d < bd) { bd = d; best = i; }
+      }
+      var p = mg.pts[best];
+      cross.setAttribute("x1", mg.xs[best]);
+      cross.setAttribute("x2", mg.xs[best]);
+      cross.style.display = "";
+      tip.hidden = false;
+      tip.textContent = TIP_FMT.format(new Date(p.ms)) + " · " + nb(p.t, 1) + "°" +
+                        (p.p > 0 ? " · " + nb(p.p, 1) + " mm" : "");
+      var px = mg.xs[best] / MET_W * rect.width;
+      var tipW = tip.offsetWidth || 120;
+      tip.style.left = Math.min(Math.max(px - tipW / 2, 0), rect.width - tipW) + "px";
+    }
+
+    function onLeave() {
+      tip.hidden = true;
+      cross.style.display = "none";
+    }
+
+    wrap.addEventListener("mousemove", onMove);
+    wrap.addEventListener("mouseleave", onLeave);
+  }
+
   function renderDetail(entry) {
     var html = "";
 
+    // ---- Meteogram for de neste 48 timene
+    var mg = buildMeteogram(entry);
+    if (mg) {
+      html += "<h3>Neste 48 timer</h3>" + mg.html;
+    }
+
     // ---- Neste 24 timer, time for time
-    html += "<h3>Neste 24 timer</h3><table class='hour-table'>";
+    html += "<h3>Time for time</h3><table class='hour-table'>";
     var now = Date.now();
     var count = 0;
     for (var i = 0; i < entry.times.length && count < 24; i++) {
@@ -480,6 +709,7 @@
             "Tidspunkter i lokal tid.</p>";
 
     detailBody.innerHTML = html;
+    attachMeteoHover(mg);
   }
 
   var WEEKDAY_FMT = new Intl.DateTimeFormat("nb-NO", { weekday: "long" });
@@ -583,9 +813,51 @@
     tryNext();
   }
 
+  // ---------------------------------------------------------------- Tema
+
+  var themeBtn = document.getElementById("theme-btn");
+
+  function applyTheme(dark) {
+    document.documentElement.classList.toggle("dark", dark);
+    themeBtn.textContent = dark ? "☀️" : "🌙";
+    try { localStorage.setItem("wxmap-theme", dark ? "dark" : "light"); } catch (e) {}
+  }
+
+  function initTheme() {
+    var stored = null;
+    try { stored = localStorage.getItem("wxmap-theme"); } catch (e) {}
+    var dark = stored
+      ? stored === "dark"
+      : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    applyTheme(dark);
+  }
+
+  themeBtn.addEventListener("click", function () {
+    applyTheme(!document.documentElement.classList.contains("dark"));
+  });
+
+  // ---------------------------------------------------------------- Min posisjon
+
+  document.getElementById("geo-btn").addEventListener("click", function () {
+    if (!navigator.geolocation) {
+      showToast("Nettleseren støtter ikke posisjonstjenester.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        goToPlace(pos.coords.latitude, pos.coords.longitude);
+      },
+      function () {
+        showToast("Fikk ikke tilgang til posisjonen din.");
+      },
+      { timeout: 10000, maximumAge: 300000 }
+    );
+  });
+
   // ---------------------------------------------------------------- Init
 
   function init() {
+    initTheme();
     map = L.map("map", {
       zoomControl: true,
       worldCopyJump: true

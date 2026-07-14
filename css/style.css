@@ -1,15 +1,67 @@
 :root {
   --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-translucent: rgba(255, 255, 255, 0.94);
   --fg: #1a2333;
   --muted: #6b7686;
   --accent: #0059b3;
+  --accent-hover: #004a94;
+  --border: #e3e8ef;
+  --input-border: #c6cdd8;
+  --hover-wash: #eaf2fb;
+  --label-bg: rgba(255, 255, 255, 0.85);
   --panel-shadow: 0 4px 24px rgba(10, 20, 40, 0.18);
+  --bar-shadow: rgba(10, 20, 40, 0.15);
+
+  /* Temperaturfarger (tekst) */
+  --warm-text: #c8102e;
+  --cold-text: #0059b3;
+
+  /* Diagramfarger (validert palett) */
+  --chart-warm: #e34948;
+  --chart-cold: #2a78d6;
+  --chart-precip: #2a78d6;
+  --chart-grid: #e1e0d9;
+  --chart-axis: #c3c2b7;
+  --chart-ink: #52514e;
+  --chart-muted: #898781;
+
   --radius: 12px;
   --topbar-h: 56px;
   --timebar-h: 72px;
 }
 
+:root.dark {
+  --bg: #0d0d0d;
+  --panel: #1a1a19;
+  --panel-translucent: rgba(22, 24, 28, 0.94);
+  --fg: #f0f2f5;
+  --muted: #9aa4b2;
+  --accent: #3987e5;
+  --accent-hover: #5598e7;
+  --border: #2c2c2a;
+  --input-border: #44464a;
+  --hover-wash: #22303f;
+  --label-bg: rgba(20, 22, 26, 0.85);
+  --panel-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+  --bar-shadow: rgba(0, 0, 0, 0.5);
+
+  --warm-text: #ff7a76;
+  --cold-text: #6db3f2;
+
+  --chart-warm: #e66767;
+  --chart-cold: #3987e5;
+  --chart-precip: #3987e5;
+  --chart-grid: #2c2c2a;
+  --chart-axis: #383835;
+  --chart-ink: #c3c2b7;
+  --chart-muted: #898781;
+}
+
 * { box-sizing: border-box; }
+
+/* hidden-attributtet skal alltid vinne over display-regler */
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -36,11 +88,11 @@ html, body {
   z-index: 1100;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   padding: 0 16px;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--panel-translucent);
   backdrop-filter: blur(6px);
-  box-shadow: 0 1px 6px rgba(10, 20, 40, 0.15);
+  box-shadow: 0 1px 6px var(--bar-shadow);
 }
 
 .title {
@@ -59,14 +111,18 @@ html, body {
   width: 100%;
   padding: 8px 12px;
   font-size: 0.95rem;
-  border: 1px solid #c6cdd8;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   outline: none;
+  background: var(--panel);
+  color: var(--fg);
 }
+
+.search input::placeholder { color: var(--muted); }
 
 .search input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(0, 89, 179, 0.15);
+  box-shadow: 0 0 0 3px rgba(0, 89, 179, 0.18);
 }
 
 .search-results {
@@ -76,7 +132,7 @@ html, body {
   margin: 0;
   padding: 4px;
   list-style: none;
-  background: #fff;
+  background: var(--panel);
   border-radius: 8px;
   box-shadow: var(--panel-shadow);
   max-height: 320px;
@@ -92,7 +148,7 @@ html, body {
 
 .search-results li:hover,
 .search-results li.active {
-  background: #eaf2fb;
+  background: var(--hover-wash);
 }
 
 .search-results li .sub {
@@ -101,6 +157,21 @@ html, body {
   font-size: 0.78rem;
 }
 
+.icon-btn {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.icon-btn:hover { background: var(--hover-wash); }
+
 /* ---------- Kart ---------- */
 
 #map {
@@ -108,6 +179,27 @@ html, body {
   top: var(--topbar-h);
   bottom: var(--timebar-h);
   left: 0; right: 0;
+  background: var(--bg);
+}
+
+/* Mørke kartfliser i mørk modus */
+:root.dark .leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.7);
+}
+
+:root.dark .leaflet-container { background: #0d0d0d; }
+
+:root.dark .leaflet-control-attribution {
+  background: rgba(20, 22, 26, 0.8);
+  color: var(--muted);
+}
+
+:root.dark .leaflet-control-attribution a { color: var(--cold-text); }
+
+:root.dark .leaflet-bar a {
+  background: var(--panel);
+  color: var(--fg);
+  border-color: var(--border);
 }
 
 /* Værmarkører */
@@ -136,11 +228,57 @@ html, body {
   line-height: 1;
   padding: 1px 4px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--label-bg);
 }
 
-.wx-temp.warm { color: #c8102e; }
-.wx-temp.cold { color: #0059b3; }
+.wx-temp.warm { color: var(--warm-text); }
+.wx-temp.cold { color: var(--cold-text); }
+
+.wx-marker .wx-wind {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--label-bg);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.wx-marker .wx-arrow {
+  display: inline-block;
+  font-size: 9px;
+  color: var(--accent);
+}
+
+/* Valgt sted: pulserende markør */
+.loc-marker { background: none; border: none; }
+
+.loc-pin {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+.loc-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  animation: loc-pulse 1.8s ease-out infinite;
+}
+
+@keyframes loc-pulse {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  70%  { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
 
 /* ---------- Tidslinje ---------- */
 
@@ -153,9 +291,9 @@ html, body {
   align-items: center;
   gap: 14px;
   padding: 0 16px;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--panel-translucent);
   backdrop-filter: blur(6px);
-  box-shadow: 0 -1px 6px rgba(10, 20, 40, 0.15);
+  box-shadow: 0 -1px 6px var(--bar-shadow);
 }
 
 .play-btn {
@@ -171,7 +309,7 @@ html, body {
   transition: background 0.15s;
 }
 
-.play-btn:hover { background: #004a94; }
+.play-btn:hover { background: var(--accent-hover); }
 
 .timebar-main {
   flex: 1;
@@ -193,9 +331,10 @@ html, body {
 
 .timebar-speed select {
   padding: 6px 8px;
-  border: 1px solid #c6cdd8;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--panel);
+  color: var(--fg);
   font-size: 0.85rem;
 }
 
@@ -210,7 +349,7 @@ html, body {
   z-index: 1200;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--panel);
   border-radius: var(--radius);
   box-shadow: var(--panel-shadow);
   overflow: hidden;
@@ -221,7 +360,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #e3e8ef;
+  border-bottom: 1px solid var(--border);
 }
 
 .detail-header h2 {
@@ -236,7 +375,11 @@ html, body {
   line-height: 1;
   color: var(--muted);
   cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
 }
+
+.detail-close:hover { background: var(--hover-wash); }
 
 .detail-body {
   flex: 1;
@@ -252,9 +395,64 @@ html, body {
   color: var(--muted);
 }
 
+.detail-body h3:first-child { margin-top: 4px; }
+
 .muted { color: var(--muted); }
 
-/* Tabell for dagsvarsel */
+/* Meteogram */
+.meteo-wrap {
+  position: relative;
+  margin: 4px 0 8px;
+}
+
+.meteo-wrap svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.meteo-grid { stroke: var(--chart-grid); stroke-width: 1; }
+.meteo-axis { stroke: var(--chart-axis); stroke-width: 1; }
+.meteo-zero { stroke: var(--chart-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+
+.meteo-label {
+  fill: var(--chart-muted);
+  font-size: 9px;
+  font-family: system-ui, sans-serif;
+}
+
+.meteo-title {
+  fill: var(--chart-ink);
+  font-size: 9.5px;
+  font-weight: 600;
+  font-family: system-ui, sans-serif;
+}
+
+.meteo-line-warm { fill: none; stroke: var(--chart-warm); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.meteo-line-cold { fill: none; stroke: var(--chart-cold); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.meteo-extreme-warm { fill: var(--warm-text); font-size: 10px; font-weight: 700; font-family: system-ui, sans-serif; }
+.meteo-extreme-cold { fill: var(--cold-text); font-size: 10px; font-weight: 700; font-family: system-ui, sans-serif; }
+
+.meteo-bar { fill: var(--chart-precip); }
+
+.meteo-cross { stroke: var(--chart-muted); stroke-width: 1; }
+
+.meteo-tip {
+  position: absolute;
+  top: 0;
+  padding: 4px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--panel-shadow);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Tabeller for varsel */
 .day-table, .hour-table {
   width: 100%;
   border-collapse: collapse;
@@ -263,7 +461,7 @@ html, body {
 
 .day-table td, .hour-table td {
   padding: 6px 4px;
-  border-bottom: 1px solid #eef1f6;
+  border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
@@ -273,10 +471,10 @@ html, body {
   display: block;
 }
 
-.t-warm { color: #c8102e; font-weight: 600; }
-.t-cold { color: #0059b3; font-weight: 600; }
+.t-warm { color: var(--warm-text); font-weight: 600; }
+.t-cold { color: var(--cold-text); font-weight: 600; }
 
-.precip { color: #0059b3; }
+.precip { color: var(--cold-text); }
 .wind { color: var(--muted); white-space: nowrap; }
 
 .day-name { font-weight: 600; white-space: nowrap; }
@@ -316,7 +514,7 @@ html, body {
     top: auto;
     left: 10px; right: 10px;
     bottom: calc(var(--timebar-h) + 10px);
-    max-height: 55vh;
+    max-height: 60vh;
     width: auto;
   }
 }
