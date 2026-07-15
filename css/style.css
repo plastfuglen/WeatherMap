@@ -172,6 +172,71 @@ html, body {
 
 .icon-btn:hover { background: var(--hover-wash); }
 
+.icon-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Favorittmeny */
+.favs { position: relative; flex: none; }
+
+.fav-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 230px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-radius: 8px;
+  box-shadow: var(--panel-shadow);
+  z-index: 1150;
+}
+
+.fav-menu li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.fav-menu li:hover { background: var(--hover-wash); }
+
+.fav-menu li.fav-empty {
+  cursor: default;
+  font-size: 0.82rem;
+}
+
+.fav-menu li.fav-empty:hover { background: none; }
+
+.fav-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fav-del {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.fav-del:hover { background: var(--border); color: var(--fg); }
+
 /* ---------- Kart ---------- */
 
 #map {
@@ -182,8 +247,8 @@ html, body {
   background: var(--bg);
 }
 
-/* Mørke kartfliser i mørk modus */
-:root.dark .leaflet-tile {
+/* Mørke kartfliser i mørk modus – kun grunnkartet, ikke radarlaget */
+:root.dark .leaflet-tile-pane .leaflet-tile {
   filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.7);
 }
 
@@ -383,7 +448,13 @@ html, body {
   font-size: 1rem;
 }
 
-.detail-close {
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.detail-close, .detail-fav {
   border: none;
   background: none;
   font-size: 1.5rem;
@@ -394,7 +465,11 @@ html, body {
   border-radius: 6px;
 }
 
-.detail-close:hover { background: var(--hover-wash); }
+.detail-fav { font-size: 1.2rem; }
+
+.detail-fav.is-fav { color: #eda100; }
+
+.detail-close:hover, .detail-fav:hover { background: var(--hover-wash); }
 
 .detail-body {
   flex: 1;
@@ -560,6 +635,23 @@ html, body {
   font-weight: 400;
   font-size: 0.75rem;
   color: var(--muted);
+}
+
+/* ---------- Radar-etikett ---------- */
+
+.radar-label {
+  position: fixed;
+  bottom: calc(var(--timebar-h) + 12px);
+  left: 12px;
+  z-index: 1050;
+  padding: 6px 12px;
+  background: var(--panel-translucent);
+  color: var(--fg);
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 999px;
+  box-shadow: 0 1px 6px var(--bar-shadow);
+  backdrop-filter: blur(6px);
 }
 
 /* ---------- Statusmelding ---------- */

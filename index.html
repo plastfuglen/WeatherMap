@@ -18,6 +18,11 @@
       <ul id="search-results" class="search-results" hidden></ul>
     </div>
     <button id="geo-btn" class="icon-btn" title="Vis været der jeg er" aria-label="Min posisjon">📍</button>
+    <button id="radar-btn" class="icon-btn" title="Vis nedbørsradar (siste time)" aria-label="Nedbørsradar">📡</button>
+    <div class="favs">
+      <button id="fav-btn" class="icon-btn" title="Favorittsteder" aria-label="Favorittsteder">★</button>
+      <ul id="fav-menu" class="fav-menu" hidden></ul>
+    </div>
     <button id="theme-btn" class="icon-btn" title="Bytt mellom lys og mørk modus" aria-label="Lys/mørk modus">🌙</button>
   </header>
 
@@ -47,7 +52,10 @@
   <aside id="detail-panel" class="detail-panel" hidden>
     <div class="detail-header">
       <h2 id="detail-title">Varsel</h2>
-      <button id="detail-close" class="detail-close" title="Lukk" aria-label="Lukk panel">×</button>
+      <div class="detail-actions">
+        <button id="detail-fav" class="detail-fav" title="Lagre som favoritt" aria-label="Lagre som favoritt">☆</button>
+        <button id="detail-close" class="detail-close" title="Lukk" aria-label="Lukk panel">×</button>
+      </div>
     </div>
     <div id="detail-body" class="detail-body">
       <p class="muted">Laster varsel …</p>
@@ -55,6 +63,7 @@
   </aside>
 
   <div id="status-toast" class="status-toast" hidden></div>
+  <div id="radar-label" class="radar-label" hidden></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>

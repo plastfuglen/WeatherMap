@@ -394,6 +394,9 @@
 
   document.addEventListener("click", function (ev) {
     if (!ev.target.closest(".search")) hideResults();
+    if (!ev.target.closest(".favs")) {
+      document.getElementById("fav-menu").hidden = true;
+    }
   });
 
   // ---------------------------------------------------------------- Detaljpanel
@@ -554,6 +557,7 @@
     setSelectedMarker(lat, lon);
     currentDetail = { lat: lat, lon: lon };
     updateHash();
+    updateFavStar();
     detailTitle.textContent = knownName || lat.toFixed(3) + "°, " + lon.toFixed(3) + "°";
     detailBody.innerHTML = '<p class="muted">Laster varsel …</p>';
 
@@ -941,6 +945,166 @@
     tryNext();
   }
 
+  // ---------------------------------------------------------------- Favoritter
+
+  var FAVS_KEY = "wxmap-favs";
+  var favBtn = document.getElementById("fav-btn");
+  var favMenu = document.getElementById("fav-menu");
+  var detailFavBtn = document.getElementById("detail-fav");
+
+  function loadFavs() {
+    try { return JSON.parse(localStorage.getItem(FAVS_KEY)) || []; } catch (e) { return []; }
+  }
+
+  function saveFavs(favs) {
+    try { localStorage.setItem(FAVS_KEY, JSON.stringify(favs)); } catch (e) {}
+  }
+
+  function favIndexOf(favs, lat, lon) {
+    for (var i = 0; i < favs.length; i++) {
+      if (Math.abs(favs[i].lat - lat) < 0.005 && Math.abs(favs[i].lon - lon) < 0.005) return i;
+    }
+    return -1;
+  }
+
+  function updateFavStar() {
+    var isFav = currentDetail &&
+      favIndexOf(loadFavs(), currentDetail.lat, currentDetail.lon) >= 0;
+    detailFavBtn.textContent = isFav ? "★" : "☆";
+    detailFavBtn.classList.toggle("is-fav", !!isFav);
+    detailFavBtn.title = isFav ? "Fjern fra favoritter" : "Lagre som favoritt";
+  }
+
+  function renderFavMenu() {
+    var favs = loadFavs();
+    favMenu.innerHTML = "";
+    if (!favs.length) {
+      var empty = document.createElement("li");
+      empty.className = "muted fav-empty";
+      empty.textContent = "Ingen favoritter ennå – åpne et sted og trykk ☆";
+      favMenu.appendChild(empty);
+      return;
+    }
+    favs.forEach(function (f) {
+      var li = document.createElement("li");
+      var name = document.createElement("span");
+      name.className = "fav-name";
+      name.textContent = f.name;
+      li.appendChild(name);
+      var del = document.createElement("button");
+      del.className = "fav-del";
+      del.title = "Fjern favoritt";
+      del.textContent = "×";
+      del.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        var updated = loadFavs();
+        var i = favIndexOf(updated, f.lat, f.lon);
+        if (i >= 0) { updated.splice(i, 1); saveFavs(updated); }
+        renderFavMenu();
+        updateFavStar();
+      });
+      li.appendChild(del);
+      li.addEventListener("click", function () {
+        favMenu.hidden = true;
+        goToPlace(f.lat, f.lon, f.name);
+      });
+      favMenu.appendChild(li);
+    });
+  }
+
+  favBtn.addEventListener("click", function () {
+    if (favMenu.hidden) renderFavMenu();
+    favMenu.hidden = !favMenu.hidden;
+  });
+
+  detailFavBtn.addEventListener("click", function () {
+    if (!currentDetail) return;
+    var favs = loadFavs();
+    var i = favIndexOf(favs, currentDetail.lat, currentDetail.lon);
+    if (i >= 0) {
+      favs.splice(i, 1);
+    } else {
+      favs.push({
+        name: detailTitle.textContent,
+        lat: +currentDetail.lat.toFixed(3),
+        lon: +currentDetail.lon.toFixed(3)
+      });
+    }
+    saveFavs(favs);
+    updateFavStar();
+  });
+
+  // ---------------------------------------------------------------- Nedbørsradar
+
+  // Radarfliser fra RainViewer (åpent API, dekker Norge). Viser siste time
+  // pluss et kort fremskriv, animert i løkke. Uavhengig av varsel-tidslinjen.
+  var RADAR_API = "https://api.rainviewer.com/public/weather-maps.json";
+  var radarBtn = document.getElementById("radar-btn");
+  var radarLabel = document.getElementById("radar-label");
+  var radar = { on: false, layers: [], frames: [], idx: 0, timer: null };
+
+  function toggleRadar() {
+    if (radar.on) { disableRadar(); return; }
+    radar.on = true;
+    radarBtn.classList.add("active");
+    radarLabel.hidden = false;
+    radarLabel.textContent = "Laster radar …";
+
+    fetch(RADAR_API)
+      .then(function (res) { return res.json(); })
+      .then(function (json) {
+        if (!radar.on) return;
+        var past = (json.radar && json.radar.past) || [];
+        var cast = (json.radar && json.radar.nowcast) || [];
+        var frames = past.slice(-9).concat(cast.slice(0, 3));
+        if (!frames.length) throw new Error("ingen radarbilder");
+
+        radar.frames = frames.map(function (f) {
+          return { time: f.time * 1000, url: json.host + f.path + "/256/{z}/{x}/{y}/2/1_1.png" };
+        });
+        radar.layers = radar.frames.map(function (f) {
+          return L.tileLayer(f.url, {
+            opacity: 0,
+            pane: "radarPane",
+            maxZoom: 19,
+            attribution: 'Radar: <a href="https://www.rainviewer.com/">RainViewer</a>'
+          }).addTo(map);
+        });
+        radar.idx = 0;
+        radarStep();
+        radar.timer = setInterval(radarStep, 750);
+      })
+      .catch(function () {
+        disableRadar();
+        showToast("Radaren er utilgjengelig akkurat nå.");
+      });
+  }
+
+  function radarStep() {
+    var n = radar.layers.length;
+    if (!n) return;
+    radar.layers.forEach(function (layer, i) {
+      layer.setOpacity(i === radar.idx ? 0.65 : 0);
+    });
+    var f = radar.frames[radar.idx];
+    var future = f.time > Date.now();
+    radarLabel.textContent = "📡 " + HOUR_FMT.format(new Date(f.time)) +
+                             (future ? " (fremskriv)" : "");
+    radar.idx = (radar.idx + 1) % n;
+  }
+
+  function disableRadar() {
+    radar.on = false;
+    radarBtn.classList.remove("active");
+    radarLabel.hidden = true;
+    if (radar.timer) { clearInterval(radar.timer); radar.timer = null; }
+    radar.layers.forEach(function (layer) { map.removeLayer(layer); });
+    radar.layers = [];
+    radar.frames = [];
+  }
+
+  radarBtn.addEventListener("click", toggleRadar);
+
   // ---------------------------------------------------------------- Delbare lenker
 
   // Kartutsnitt og valgt sted speiles i URL-en: #zoom/lat/lon[/sel=lat,lon]
@@ -1052,6 +1216,10 @@
     } else {
       map.setView([65.0, 13.0], 5); // Norge
     }
+
+    // Radarlaget ligger over grunnkartet, under markørene
+    map.createPane("radarPane");
+    map.getPane("radarPane").style.zIndex = 350;
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,

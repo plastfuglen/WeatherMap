@@ -18,6 +18,10 @@ oppå [OpenStreetMap](https://www.openstreetmap.org/).
 - **Nedbørsvarsel for de neste 90 minuttene** (MET nowcast, kun Norden)
 - **Soloppgang/solnedgang** – inkl. midnattssol og mørketid
 - **Vindpiler** på kartmarkørene og **mørk modus** (🌙-knapp)
+- **Nedbørsradar** (📡-knapp) – animert radar for siste time pluss kort
+  fremskriv, som eget kartlag ([RainViewer](https://www.rainviewer.com/))
+- **Favorittsteder** (★) – lagre steder fra varselpanelet og hopp raskt
+  mellom dem fra menyen i toppfeltet (lagres i nettleseren)
 - **Delbare lenker** – kartutsnitt og valgt sted ligger i URL-en
 - **Tastatur**: ⬅️/➡️ blar i tid, mellomrom spiller av, Esc lukker panelet,
   «Nå»-knappen hopper tilbake til nåtid
