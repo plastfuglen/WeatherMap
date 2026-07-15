@@ -431,6 +431,9 @@
     detailPanel.hidden = true;
     clearSelectedMarker();
     currentDetail = null;
+    compareState = null;
+    clearCmpMarker();
+    map.getContainer().classList.remove("picking");
     updateHash();
   });
 
@@ -553,6 +556,9 @@
   }
 
   function openDetail(lat, lon, knownName) {
+    compareState = null;
+    clearCmpMarker();
+    map.getContainer().classList.remove("picking");
     detailPanel.hidden = false;
     setSelectedMarker(lat, lon);
     currentDetail = { lat: lat, lon: lon };
@@ -614,7 +620,8 @@
     return num.toFixed(decimals).replace(".", ",");
   }
 
-  function buildMeteogram(entry) {
+  /** Timesverdier (temp + nedbør) for de neste maks 48 timene. */
+  function collectHourly(entry) {
     var pts = [];
     var now = Date.now();
     for (var i = 0; i < entry.times.length && pts.length < 48; i++) {
@@ -627,6 +634,12 @@
       var det = d.next_1_hours.details;
       pts.push({ ms: ms, t: t, p: (det && det.precipitation_amount) || 0 });
     }
+    return pts;
+  }
+
+  function buildMeteogram(entry) {
+    var i;
+    var pts = collectHourly(entry);
     if (pts.length < 3) return null;
 
     var xs = pts.map(function (_, idx) {
@@ -1105,6 +1118,296 @@
 
   radarBtn.addEventListener("click", toggleRadar);
 
+  // ---------------------------------------------------------------- Sammenligning
+
+  // To steder side om side: temperaturgraf, «nå»-kort og dag-for-dag.
+  // Fargene følger stedet (A = blå, B = grønn), aldri verdien.
+  var compareState = null; // null | {a, picking:true} | {a, b}
+  var cmpMarker = null;
+
+  function setCmpMarker(lat, lon) {
+    clearCmpMarker();
+    cmpMarker = L.marker([lat, lon], {
+      icon: L.divIcon({
+        className: "loc-marker",
+        html: '<div class="loc-pulse loc-pulse-b"></div><div class="loc-pin loc-pin-b"></div>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      }),
+      interactive: false,
+      keyboard: false
+    }).addTo(map);
+  }
+
+  function clearCmpMarker() {
+    if (cmpMarker) {
+      map.removeLayer(cmpMarker);
+      cmpMarker = null;
+    }
+  }
+
+  function startComparePicking() {
+    if (!currentDetail) return;
+    compareState = {
+      a: {
+        lat: currentDetail.lat,
+        lon: currentDetail.lon,
+        name: detailTitle.textContent
+      },
+      picking: true
+    };
+    map.getContainer().classList.add("picking");
+    detailTitle.textContent = "Sammenlign " + compareState.a.name + " med …";
+
+    var html = "<p class='muted'>Klikk et sted i kartet, eller velg en favoritt:</p>";
+    var favs = loadFavs().filter(function (f) {
+      return favIndexOf([f], compareState.a.lat, compareState.a.lon) < 0;
+    });
+    if (favs.length) {
+      html += "<ul class='cmp-pick'>" + favs.map(function (f, i) {
+        return "<li data-i='" + i + "'>★ " + escapeHtml(f.name) + "</li>";
+      }).join("") + "</ul>";
+    }
+    html += "<button class='cmp-cancel' id='cmp-cancel'>Avbryt</button>";
+    detailBody.innerHTML = html;
+
+    detailBody.querySelectorAll(".cmp-pick li").forEach(function (li) {
+      li.addEventListener("click", function () {
+        var f = favs[+li.getAttribute("data-i")];
+        setCompareB(f.lat, f.lon, f.name);
+      });
+    });
+    document.getElementById("cmp-cancel").addEventListener("click", function () {
+      exitCompare();
+    });
+  }
+
+  function exitCompare() {
+    var a = compareState && compareState.a;
+    compareState = null;
+    clearCmpMarker();
+    map.getContainer().classList.remove("picking");
+    if (a) openDetail(a.lat, a.lon, a.name);
+  }
+
+  function setCompareB(lat, lon, name) {
+    if (!compareState) return;
+    map.getContainer().classList.remove("picking");
+    setCmpMarker(lat, lon);
+    compareState = {
+      a: compareState.a,
+      b: { lat: lat, lon: lon, name: name || lat.toFixed(2) + "°, " + lon.toFixed(2) + "°" }
+    };
+    var state = compareState;
+
+    if (!name) {
+      // Slå opp stedsnavn i bakgrunnen og oppdater visningen
+      fetch(NOMINATIM_URL + "/reverse?format=jsonv2&zoom=12&accept-language=no&lat=" +
+            lat + "&lon=" + lon)
+        .then(function (res) { return res.json(); })
+        .then(function (r) {
+          if (compareState !== state || !compareState.b) return;
+          var a = r.address || {};
+          var found = a.village || a.town || a.suburb || a.city || a.municipality ||
+                      (r.name || "").split(",")[0];
+          if (found) {
+            compareState.b.name = found;
+            renderCompare();
+          }
+        })
+        .catch(function () {});
+    }
+    renderCompare();
+  }
+
+  function renderCompare() {
+    if (!compareState || !compareState.b) return;
+    var state = compareState;
+    var A = state.a, B = state.b;
+
+    detailTitle.textContent = A.name + " ⇄ " + B.name;
+    detailBody.innerHTML = "<p class='muted'>Laster varsler …</p>";
+
+    Promise.all([fetchForecast(A.lat, A.lon), fetchForecast(B.lat, B.lon)])
+      .then(function (entries) {
+        if (compareState !== state) return;
+        renderCompareBody(entries[0], entries[1], A, B);
+      })
+      .catch(function () {
+        if (compareState !== state) return;
+        detailBody.innerHTML = "<p class='muted'>Kunne ikke hente varslene. Prøv igjen senere.</p>";
+      });
+  }
+
+  function renderCompareBody(entryA, entryB, A, B) {
+    var html = "<div class='cmp-legend'>" +
+      "<span><span class='dot dot-a'></span>" + escapeHtml(A.name) + "</span>" +
+      "<span><span class='dot dot-b'></span>" + escapeHtml(B.name) + "</span></div>";
+
+    // ---- Temperaturgraf med to linjer
+    var chart = buildCompareChart(entryA, entryB);
+    if (chart) {
+      html += "<h3>Temperatur neste 48 timer</h3>" + chart.html;
+    }
+
+    // ---- Slik er det nå
+    html += "<h3>Nå</h3><div class='cmp-now'>" +
+            compareNowCard(entryA, "a") + compareNowCard(entryB, "b") + "</div>";
+
+    // ---- Dag for dag
+    var daysA = aggregateDays(entryA);
+    var daysB = aggregateDays(entryB);
+    var bByDate = {};
+    daysB.forEach(function (day) { bByDate[day.dateLabel] = day; });
+
+    html += "<h3>Dag for dag</h3><table class='cmp-table'>" +
+      "<tr><td></td><td><span class='dot dot-a'></span></td><td><span class='dot dot-b'></span></td></tr>";
+    daysA.forEach(function (dayA) {
+      var dayB = bByDate[dayA.dateLabel];
+      html += "<tr><td class='day-name'>" + dayA.label +
+              "<span class='sub'>" + dayA.dateLabel + "</span></td>" +
+              compareDayCell(dayA) + compareDayCell(dayB) + "</tr>";
+    });
+    html += "</table>";
+
+    html += "<button class='cmp-cancel' id='cmp-back'>← Tilbake til varselet</button>";
+    html += "<p class='muted' style='font-size:0.75rem'>Varsler fra Meteorologisk institutt (Yr).</p>";
+
+    detailBody.innerHTML = html;
+    if (chart) attachCompareHover(chart, A, B);
+    document.getElementById("cmp-back").addEventListener("click", exitCompare);
+  }
+
+  function compareNowCard(entry, cls) {
+    var step = nearestStep(entry, new Date());
+    if (!step) return "<div class='cmp-card'></div>";
+    var code = symbolCode(step);
+    var inst = step.data.instant.details || {};
+    return "<div class='cmp-card cmp-" + cls + "'>" +
+      (code ? "<img src='" + iconBase + code + ".svg' alt=''>" : "") +
+      "<div class='cmp-card-temp'>" + tempSpan(airTemp(step)) + "</div>" +
+      (typeof inst.wind_speed === "number"
+        ? "<div class='cmp-card-wind'>💨 " + Math.round(inst.wind_speed) + " m/s</div>"
+        : "") +
+      "</div>";
+  }
+
+  function compareDayCell(day) {
+    if (!day) return "<td class='cmp-cell muted'>–</td>";
+    return "<td class='cmp-cell'>" +
+      (day.symbol ? "<img src='" + iconBase + day.symbol + ".svg' alt=''>" : "") +
+      "<div>" + tempSpan(day.max) + "&thinsp;/&thinsp;" + tempSpan(day.min) + "</div>" +
+      "<div class='cmp-precip'>" + (day.precip > 0 ? nb(day.precip, 1) + " mm" : "&nbsp;") + "</div>" +
+      "</td>";
+  }
+
+  var CMP_W = 360, CMP_H = 136;
+  var CMP_L = 26, CMP_R = 8, CMP_TOP = 12, CMP_BOT = 108;
+
+  function buildCompareChart(entryA, entryB) {
+    var ptsA = collectHourly(entryA);
+    var ptsB = collectHourly(entryB);
+    if (ptsA.length < 3 || ptsB.length < 3) return null;
+
+    // Parvis på felles tidspunkter
+    var bByMs = {};
+    ptsB.forEach(function (p) { bByMs[p.ms] = p; });
+    var pairs = [];
+    ptsA.forEach(function (p) {
+      if (bByMs[p.ms]) pairs.push({ ms: p.ms, ta: p.t, tb: bByMs[p.ms].t });
+    });
+    if (pairs.length < 3) return null;
+
+    var xs = pairs.map(function (_, i) {
+      return CMP_L + (CMP_W - CMP_L - CMP_R) * i / (pairs.length - 1);
+    });
+
+    var lo = Infinity, hi = -Infinity;
+    pairs.forEach(function (p) {
+      lo = Math.min(lo, p.ta, p.tb);
+      hi = Math.max(hi, p.ta, p.tb);
+    });
+    var span = (hi - lo) || 1;
+    var stepT = span <= 5 ? 2 : span <= 12 ? 3 : span <= 22 ? 5 : 10;
+    var tLo = Math.floor((lo - 1) / stepT) * stepT;
+    var tHi = Math.ceil((hi + 1) / stepT) * stepT;
+
+    function ty(v) {
+      return CMP_BOT - (v - tLo) / (tHi - tLo) * (CMP_BOT - CMP_TOP);
+    }
+
+    var svg = "";
+    for (var tv = tLo; tv <= tHi; tv += stepT) {
+      var y = ty(tv).toFixed(1);
+      svg += "<line class='" + (tv === 0 ? "meteo-zero" : "meteo-grid") +
+             "' x1='" + CMP_L + "' y1='" + y + "' x2='" + (CMP_W - CMP_R) + "' y2='" + y + "'/>";
+      svg += "<text class='meteo-label' x='" + (CMP_L - 4) + "' y='" + (+y + 3) +
+             "' text-anchor='end'>" + tv + "</text>";
+    }
+
+    for (var i = 0; i < pairs.length; i++) {
+      var dt = new Date(pairs[i].ms);
+      if (dt.getHours() % 6 !== 0) continue;
+      var x = xs[i].toFixed(1);
+      svg += "<line class='meteo-grid' x1='" + x + "' y1='" + CMP_TOP +
+             "' x2='" + x + "' y2='" + CMP_BOT + "'/>";
+      svg += "<text class='meteo-label' x='" + x + "' y='" + (CMP_BOT + 12) +
+             "' text-anchor='middle'>" + String(dt.getHours()).padStart(2, "0") + "</text>";
+    }
+
+    ["a", "b"].forEach(function (key) {
+      var line = pairs.map(function (p, idx) {
+        return xs[idx].toFixed(1) + "," + ty(key === "a" ? p.ta : p.tb).toFixed(1);
+      }).join(" ");
+      svg += "<polyline class='cmp-line-" + key + "' points='" + line + "'/>";
+    });
+
+    svg += "<line class='meteo-cross' x1='0' y1='" + CMP_TOP + "' x2='0' y2='" +
+           CMP_BOT + "' style='display:none'/>";
+
+    var html = "<div class='meteo-wrap cmp-wrap'>" +
+      "<svg viewBox='0 0 " + CMP_W + " " + CMP_H + "' role='img' " +
+      "aria-label='Temperatur for begge steder de neste 48 timene'>" + svg + "</svg>" +
+      "<div class='meteo-tip' hidden></div></div>";
+
+    return { html: html, pairs: pairs, xs: xs };
+  }
+
+  function attachCompareHover(chart, A, B) {
+    var wrap = detailBody.querySelector(".cmp-wrap");
+    if (!wrap) return;
+    var svgEl = wrap.querySelector("svg");
+    var tip = wrap.querySelector(".meteo-tip");
+    var cross = svgEl.querySelector(".meteo-cross");
+
+    wrap.addEventListener("mousemove", function (ev) {
+      var rect = svgEl.getBoundingClientRect();
+      var vx = (ev.clientX - rect.left) / rect.width * CMP_W;
+      var best = 0, bd = Infinity;
+      for (var i = 0; i < chart.xs.length; i++) {
+        var d = Math.abs(chart.xs[i] - vx);
+        if (d < bd) { bd = d; best = i; }
+      }
+      var p = chart.pairs[best];
+      cross.setAttribute("x1", chart.xs[best]);
+      cross.setAttribute("x2", chart.xs[best]);
+      cross.style.display = "";
+      tip.hidden = false;
+      tip.textContent = TIP_FMT.format(new Date(p.ms)) + " · " +
+                        A.name + " " + nb(p.ta, 1) + "° · " +
+                        B.name + " " + nb(p.tb, 1) + "°";
+      var px = chart.xs[best] / CMP_W * rect.width;
+      var tipW = tip.offsetWidth || 160;
+      tip.style.left = Math.min(Math.max(px - tipW / 2, 0), rect.width - tipW) + "px";
+    });
+    wrap.addEventListener("mouseleave", function () {
+      tip.hidden = true;
+      cross.style.display = "none";
+    });
+  }
+
+  document.getElementById("detail-cmp").addEventListener("click", startComparePicking);
+
   // ---------------------------------------------------------------- Delbare lenker
 
   // Kartutsnitt og valgt sted speiles i URL-en: #zoom/lat/lon[/sel=lat,lon]
@@ -1234,7 +1537,11 @@
       updateHash();
     });
     map.on("click", function (ev) {
-      openDetail(ev.latlng.lat, ev.latlng.lng);
+      if (compareState && compareState.picking) {
+        setCompareB(ev.latlng.lat, ev.latlng.lng);
+      } else {
+        openDetail(ev.latlng.lat, ev.latlng.lng);
+      }
     });
 
     slider.max = String(timeline.length - 1);

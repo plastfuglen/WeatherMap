@@ -22,6 +22,9 @@ oppå [OpenStreetMap](https://www.openstreetmap.org/).
   fremskriv, som eget kartlag ([RainViewer](https://www.rainviewer.com/))
 - **Favorittsteder** (★) – lagre steder fra varselpanelet og hopp raskt
   mellom dem fra menyen i toppfeltet (lagres i nettleseren)
+- **Sammenlign to steder** (⇄ i varselpanelet) – temperaturgraf for begge,
+  «nå»-kort side om side og dag-for-dag-tabell; velg sted nr. 2 med
+  kartklikk eller fra favorittene
 - **Delbare lenker** – kartutsnitt og valgt sted ligger i URL-en
 - **Tastatur**: ⬅️/➡️ blar i tid, mellomrom spiller av, Esc lukker panelet,
   «Nå»-knappen hopper tilbake til nåtid

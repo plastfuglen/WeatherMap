@@ -21,6 +21,8 @@
   --chart-warm: #e34948;
   --chart-cold: #2a78d6;
   --chart-precip: #2a78d6;
+  --cmp-a: #2a78d6;
+  --cmp-b: #1baf7a;
   --chart-grid: #e1e0d9;
   --chart-axis: #c3c2b7;
   --chart-ink: #52514e;
@@ -52,6 +54,8 @@
   --chart-warm: #e66767;
   --chart-cold: #3987e5;
   --chart-precip: #3987e5;
+  --cmp-a: #3987e5;
+  --cmp-b: #199e70;
   --chart-grid: #2c2c2a;
   --chart-axis: #383835;
   --chart-ink: #c3c2b7;
@@ -339,6 +343,9 @@ html, body {
   animation: loc-pulse 1.8s ease-out infinite;
 }
 
+.loc-pin-b { background: var(--cmp-b); }
+.loc-pulse-b { border-color: var(--cmp-b); }
+
 @keyframes loc-pulse {
   0%   { transform: scale(0.6); opacity: 0.9; }
   70%  { transform: scale(2.4); opacity: 0; }
@@ -603,6 +610,117 @@ html, body {
   pointer-events: none;
   z-index: 5;
 }
+
+/* Sammenligning av to steder */
+
+#map.picking { cursor: crosshair; }
+
+.cmp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: baseline;
+}
+
+.dot-a { background: var(--cmp-a); }
+.dot-b { background: var(--cmp-b); }
+
+.cmp-line-a { fill: none; stroke: var(--cmp-a); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cmp-line-b { fill: none; stroke: var(--cmp-b); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.cmp-now {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cmp-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border-top: 3px solid;
+  background: var(--hover-wash);
+}
+
+.cmp-card.cmp-a { border-color: var(--cmp-a); }
+.cmp-card.cmp-b { border-color: var(--cmp-b); }
+
+.cmp-card img { width: 44px; height: 44px; }
+
+.cmp-card-temp { font-size: 1.3rem; }
+
+.cmp-card-wind { font-size: 0.8rem; color: var(--muted); }
+
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.cmp-table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.cmp-cell { text-align: center; }
+
+.cmp-cell img {
+  width: 28px;
+  height: 28px;
+  display: block;
+  margin: 0 auto;
+}
+
+.cmp-precip {
+  font-size: 0.75rem;
+  color: var(--cold-text);
+}
+
+.cmp-pick {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.cmp-pick li {
+  padding: 9px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.cmp-pick li:hover { background: var(--hover-wash); }
+
+.cmp-cancel {
+  display: block;
+  width: 100%;
+  margin: 12px 0 4px;
+  padding: 9px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cmp-cancel:hover { background: var(--hover-wash); }
 
 /* Tabeller for varsel */
 .day-table, .hour-table {
