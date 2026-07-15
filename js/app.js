@@ -13,6 +13,9 @@
   // ---------------------------------------------------------------- Konfig
 
   var FORECAST_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
+  var ALERTS_URL = "https://api.met.no/weatherapi/metalerts/2.0/current.json";
+  var NOWCAST_URL = "https://api.met.no/weatherapi/nowcast/2.0/complete";
+  var SUNRISE_URL = "https://api.met.no/weatherapi/sunrise/3.0/sun";
   var NOMINATIM_URL = "https://nominatim.openstreetmap.org";
 
   // Kandidat-URLer for MET sine offisielle værsymboler (SVG). Vi prober ved
@@ -424,16 +427,140 @@
   document.getElementById("detail-close").addEventListener("click", function () {
     detailPanel.hidden = true;
     clearSelectedMarker();
+    currentDetail = null;
+    updateHash();
   });
+
+  // Ekstrainfo (farevarsler, nedbør nå, soltider) lastes parallelt og
+  // flettes inn øverst i panelet etter hvert som svarene kommer.
+  var extras = { alerts: "", nowcast: "", sun: "" };
+  var currentDetail = null;
+
+  function flushExtras() {
+    var div = detailBody.querySelector(".detail-extras");
+    if (div) div.innerHTML = extras.alerts + extras.nowcast + extras.sun;
+  }
+
+  function fetchExtras(lat, lon, abort) {
+    extras = { alerts: "", nowcast: "", sun: "" };
+    var q = "?lat=" + lat.toFixed(4) + "&lon=" + lon.toFixed(4);
+
+    // Farevarsler (gult/oransje/rødt)
+    fetch(ALERTS_URL + q, { signal: abort.signal })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (json) {
+        if (!json || abort.signal.aborted || !json.features) return;
+        extras.alerts = json.features.map(function (f) {
+          var p = f.properties || {};
+          var color = (p.awareness_level || "").split(";")[1] || "";
+          color = color.trim().toLowerCase();
+          if (["yellow", "orange", "red"].indexOf(color) < 0) color = "yellow";
+          var name = p.eventAwarenessName || p.event || "Farevarsel";
+          var body = [p.description, p.instruction].filter(Boolean).join(" ");
+          return "<details class='alert-chip alert-" + color + "'>" +
+                 "<summary>⚠️ Farevarsel: " + escapeHtml(name) + "</summary>" +
+                 "<p>" + escapeHtml(body) + "</p></details>";
+        }).join("");
+        flushExtras();
+      })
+      .catch(function () { /* farevarsler er tillegg – ignorer feil */ });
+
+    // Nedbør de neste 90 minuttene (kun Norden)
+    fetch(NOWCAST_URL + q, { signal: abort.signal })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (json) {
+        if (!json || abort.signal.aborted) return;
+        var series = (json.properties && json.properties.timeseries) || [];
+        var limit = Date.now() + 95 * 60e3;
+        var steps = [];
+        series.forEach(function (s) {
+          var ms = Date.parse(s.time);
+          var det = s.data && s.data.instant && s.data.instant.details;
+          if (ms <= limit && det && typeof det.precipitation_rate === "number") {
+            steps.push({ ms: ms, r: det.precipitation_rate });
+          }
+        });
+        if (steps.length < 3) return;
+
+        var wet = function (s) { return s.r > 0.1; };
+        var text, i;
+        if (!steps.some(wet)) {
+          text = "Oppholdsvær de neste 90 minuttene";
+        } else if (!wet(steps[0])) {
+          for (i = 0; i < steps.length && !wet(steps[i]); i++) {}
+          text = "Nedbør fra ca. kl. " + HOUR_FMT.format(new Date(steps[i].ms));
+        } else {
+          for (i = 0; i < steps.length && wet(steps[i]); i++) {}
+          text = i >= steps.length
+            ? "Nedbør de neste 90 minuttene"
+            : "Nedbøren gir seg ca. kl. " + HOUR_FMT.format(new Date(steps[i].ms));
+        }
+
+        var maxR = Math.max.apply(null, steps.map(function (s) { return s.r; }));
+        var bars = "";
+        if (maxR > 0.1) {
+          bars = "<div class='nowcast-strip' aria-hidden='true'>" +
+            steps.map(function (s) {
+              var h = Math.max(s.r > 0.1 ? 3 : 1, Math.round(s.r / maxR * 16));
+              return "<span style='height:" + h + "px'></span>";
+            }).join("") + "</div>";
+        }
+        extras.nowcast = "<div class='nowcast'><span>🌧️ " + text + "</span>" + bars + "</div>";
+        flushExtras();
+      })
+      .catch(function () { /* nowcast dekker bare Norden – ignorer feil */ });
+
+    // Soloppgang og solnedgang
+    var d = new Date();
+    var dateStr = d.getFullYear() + "-" +
+                  String(d.getMonth() + 1).padStart(2, "0") + "-" +
+                  String(d.getDate()).padStart(2, "0");
+    var offMin = -d.getTimezoneOffset();
+    var offStr = (offMin < 0 ? "-" : "+") +
+                 String(Math.floor(Math.abs(offMin) / 60)).padStart(2, "0") + ":" +
+                 String(Math.abs(offMin) % 60).padStart(2, "0");
+    fetch(SUNRISE_URL + q + "&date=" + dateStr + "&offset=" + encodeURIComponent(offStr),
+          { signal: abort.signal })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (json) {
+        if (!json || abort.signal.aborted) return;
+        var p = json.properties || {};
+        var rise = p.sunrise && p.sunrise.time;
+        var set = p.sunset && p.sunset.time;
+        var line;
+        if (rise && set) {
+          line = "🌅 " + HOUR_FMT.format(new Date(rise)) +
+                 " · 🌇 " + HOUR_FMT.format(new Date(set));
+        } else {
+          var noonEl = p.solarnoon && p.solarnoon.disc_centre_elevation;
+          line = typeof noonEl === "number" && noonEl > 0
+            ? "☀️ Midnattssol – sola går ikke ned i dag"
+            : "🌑 Mørketid – sola går ikke opp i dag";
+        }
+        extras.sun = "<p class='sun-line'>" + line + "</p>";
+        flushExtras();
+      })
+      .catch(function () { /* soltider er pynt – ignorer feil */ });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
 
   function openDetail(lat, lon, knownName) {
     detailPanel.hidden = false;
     setSelectedMarker(lat, lon);
+    currentDetail = { lat: lat, lon: lon };
+    updateHash();
     detailTitle.textContent = knownName || lat.toFixed(3) + "°, " + lon.toFixed(3) + "°";
     detailBody.innerHTML = '<p class="muted">Laster varsel …</p>';
 
     if (detailAbort) detailAbort.abort();
     var abort = detailAbort = new AbortController();
+
+    fetchExtras(lat, lon, abort);
 
     // Stedsnavn via omvendt geokoding (hvis vi ikke fikk det fra søket)
     if (!knownName) {
@@ -657,7 +784,7 @@
   }
 
   function renderDetail(entry) {
-    var html = "";
+    var html = "<div class='detail-extras'></div>";
 
     // ---- Meteogram for de neste 48 timene
     var mg = buildMeteogram(entry);
@@ -709,6 +836,7 @@
             "Tidspunkter i lokal tid.</p>";
 
     detailBody.innerHTML = html;
+    flushExtras();
     attachMeteoHover(mg);
   }
 
@@ -813,6 +941,59 @@
     tryNext();
   }
 
+  // ---------------------------------------------------------------- Delbare lenker
+
+  // Kartutsnitt og valgt sted speiles i URL-en: #zoom/lat/lon[/sel=lat,lon]
+  function updateHash() {
+    if (!map) return;
+    var c = map.getCenter();
+    var h = "#" + map.getZoom() + "/" + c.lat.toFixed(3) + "/" + c.lng.toFixed(3);
+    if (currentDetail) {
+      h += "/sel=" + currentDetail.lat.toFixed(3) + "," + currentDetail.lon.toFixed(3);
+    }
+    history.replaceState(null, "", h);
+  }
+
+  function parseHash() {
+    var m = location.hash.match(
+      /^#(\d{1,2})\/(-?[\d.]+)\/(-?[\d.]+)(?:\/sel=(-?[\d.]+),(-?[\d.]+))?/
+    );
+    if (!m) return null;
+    return {
+      zoom: +m[1],
+      lat: +m[2],
+      lon: +m[3],
+      sel: m[4] ? { lat: +m[4], lon: +m[5] } : null
+    };
+  }
+
+  // ---------------------------------------------------------------- Tastatur
+
+  document.addEventListener("keydown", function (ev) {
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if (ev.key === "ArrowRight") {
+      stopPlayback();
+      setTimeIndex(timeIndex + 1);
+      ev.preventDefault();
+    } else if (ev.key === "ArrowLeft") {
+      stopPlayback();
+      setTimeIndex(timeIndex - 1);
+      ev.preventDefault();
+    } else if (ev.key === " ") {
+      if (playTimer) stopPlayback();
+      else startPlayback();
+      ev.preventDefault();
+    } else if (ev.key === "Escape" && !detailPanel.hidden) {
+      document.getElementById("detail-close").click();
+    }
+  });
+
+  document.getElementById("now-btn").addEventListener("click", function () {
+    stopPlayback();
+    setTimeIndex(0);
+  });
+
   // ---------------------------------------------------------------- Tema
 
   var themeBtn = document.getElementById("theme-btn");
@@ -858,10 +1039,19 @@
 
   function init() {
     initTheme();
+    var fromHash = parseHash();
+
     map = L.map("map", {
       zoomControl: true,
-      worldCopyJump: true
-    }).setView([65.0, 13.0], 5); // Norge
+      worldCopyJump: true,
+      keyboard: false // piltastene styrer tidslinjen i stedet
+    });
+
+    if (fromHash) {
+      map.setView([fromHash.lat, fromHash.lon], fromHash.zoom);
+    } else {
+      map.setView([65.0, 13.0], 5); // Norge
+    }
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
@@ -871,7 +1061,10 @@
 
     markerLayer = L.layerGroup().addTo(map);
 
-    map.on("moveend", refreshGrid);
+    map.on("moveend", function () {
+      refreshGrid();
+      updateHash();
+    });
     map.on("click", function (ev) {
       openDetail(ev.latlng.lat, ev.latlng.lng);
     });
@@ -881,6 +1074,10 @@
 
     probeIconBase();
     doRefreshGrid();
+
+    if (fromHash && fromHash.sel) {
+      openDetail(fromHash.sel.lat, fromHash.sel.lon);
+    }
   }
 
   init();

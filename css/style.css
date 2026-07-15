@@ -311,6 +311,21 @@ html, body {
 
 .play-btn:hover { background: var(--accent-hover); }
 
+.now-btn {
+  flex: none;
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.now-btn:hover { background: var(--hover-wash); }
+
 .timebar-main {
   flex: 1;
   display: flex;
@@ -398,6 +413,68 @@ html, body {
 .detail-body h3:first-child { margin-top: 4px; }
 
 .muted { color: var(--muted); }
+
+/* Ekstrainfo: farevarsler, nedbør nå, soltider */
+
+.detail-extras:not(:empty) { margin-bottom: 4px; }
+
+/* Farevarsel-chips: statusfarge + ikon + tekst, aldri farge alene */
+.alert-chip {
+  margin: 0 0 8px;
+  border-radius: 8px;
+  border-left: 4px solid;
+  overflow: hidden;
+  font-size: 0.88rem;
+}
+
+.alert-chip summary {
+  padding: 8px 10px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.alert-chip p {
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 0.82rem;
+}
+
+.alert-yellow { border-color: #fab219; background: rgba(250, 178, 25, 0.14); }
+.alert-orange { border-color: #ec835a; background: rgba(236, 131, 90, 0.14); }
+.alert-red    { border-color: #d03b3b; background: rgba(208, 59, 59, 0.14); }
+
+.nowcast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--hover-wash);
+  font-size: 0.88rem;
+}
+
+.nowcast-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 18px;
+  flex: none;
+}
+
+.nowcast-strip span {
+  width: 4px;
+  border-radius: 1px 1px 0 0;
+  background: var(--chart-precip);
+}
+
+.sun-line {
+  margin: 0 0 4px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
 
 /* Meteogram */
 .meteo-wrap {

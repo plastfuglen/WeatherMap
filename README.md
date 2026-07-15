@@ -12,8 +12,15 @@ oppå [OpenStreetMap](https://www.openstreetmap.org/).
   9 døgn frem
 - **Stedssøk** (Nominatim/OpenStreetMap) – søk opp et sted og hopp dit
 - **Klikk hvor som helst på kartet** for å få langtidsvarselet for punktet:
-  time-for-time neste døgn, og dagsvarsel med min/maks-temperatur, nedbør og
-  vind
+  meteogram for 48 timer, time-for-time neste døgn, og dagsvarsel med
+  min/maks-temperatur, nedbør og vind
+- **Farevarsler** fra MET (gult/oransje/rødt) vises for valgt punkt
+- **Nedbørsvarsel for de neste 90 minuttene** (MET nowcast, kun Norden)
+- **Soloppgang/solnedgang** – inkl. midnattssol og mørketid
+- **Vindpiler** på kartmarkørene og **mørk modus** (🌙-knapp)
+- **Delbare lenker** – kartutsnitt og valgt sted ligger i URL-en
+- **Tastatur**: ⬅️/➡️ blar i tid, mellomrom spiller av, Esc lukker panelet,
+  «Nå»-knappen hopper tilbake til nåtid
 
 ## Teknologi
 
