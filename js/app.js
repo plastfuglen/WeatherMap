@@ -47,6 +47,15 @@
   var playTimer = null;
   var detailAbort = null;
 
+  // ---------------------------------------------------------------- Hjelpere
+
+  /** Registrerer en klikk-lytter bare hvis elementet finnes – gjør at en
+   *  mellomlagret, eldre HTML-versjon aldri kan velte hele appen. */
+  function listen(id, fn) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("click", fn);
+  }
+
   // ---------------------------------------------------------------- Tidslinje
 
   /** Bygger en liste med UTC-tidspunkter: hver time i 48 t (fra neste hele
@@ -983,6 +992,7 @@
   function updateFavStar() {
     var isFav = currentDetail &&
       favIndexOf(loadFavs(), currentDetail.lat, currentDetail.lon) >= 0;
+    if (!detailFavBtn) return;
     detailFavBtn.textContent = isFav ? "★" : "☆";
     detailFavBtn.classList.toggle("is-fav", !!isFav);
     detailFavBtn.title = isFav ? "Fjern fra favoritter" : "Lagre som favoritt";
@@ -1025,12 +1035,12 @@
     });
   }
 
-  favBtn.addEventListener("click", function () {
+  if (favBtn) favBtn.addEventListener("click", function () {
     if (favMenu.hidden) renderFavMenu();
     favMenu.hidden = !favMenu.hidden;
   });
 
-  detailFavBtn.addEventListener("click", function () {
+  if (detailFavBtn) detailFavBtn.addEventListener("click", function () {
     if (!currentDetail) return;
     var favs = loadFavs();
     var i = favIndexOf(favs, currentDetail.lat, currentDetail.lon);
@@ -1116,7 +1126,7 @@
     radar.frames = [];
   }
 
-  radarBtn.addEventListener("click", toggleRadar);
+  if (radarBtn) radarBtn.addEventListener("click", toggleRadar);
 
   // ---------------------------------------------------------------- Sammenligning
 
@@ -1158,6 +1168,7 @@
     };
     map.getContainer().classList.add("picking");
     detailTitle.textContent = "Sammenlign " + compareState.a.name + " med …";
+    showToast("Klikk i kartet på stedet du vil sammenligne med");
 
     var html = "<p class='muted'>Klikk et sted i kartet, eller velg en favoritt:</p>";
     var favs = loadFavs().filter(function (f) {
@@ -1406,7 +1417,7 @@
     });
   }
 
-  document.getElementById("detail-cmp").addEventListener("click", startComparePicking);
+  listen("detail-cmp", startComparePicking);
 
   // ---------------------------------------------------------------- Delbare lenker
 
@@ -1456,7 +1467,7 @@
     }
   });
 
-  document.getElementById("now-btn").addEventListener("click", function () {
+  listen("now-btn", function () {
     stopPlayback();
     setTimeIndex(0);
   });
@@ -1467,7 +1478,7 @@
 
   function applyTheme(dark) {
     document.documentElement.classList.toggle("dark", dark);
-    themeBtn.textContent = dark ? "☀️" : "🌙";
+    if (themeBtn) themeBtn.textContent = dark ? "☀️" : "🌙";
     try { localStorage.setItem("wxmap-theme", dark ? "dark" : "light"); } catch (e) {}
   }
 
@@ -1480,13 +1491,13 @@
     applyTheme(dark);
   }
 
-  themeBtn.addEventListener("click", function () {
+  if (themeBtn) themeBtn.addEventListener("click", function () {
     applyTheme(!document.documentElement.classList.contains("dark"));
   });
 
   // ---------------------------------------------------------------- Min posisjon
 
-  document.getElementById("geo-btn").addEventListener("click", function () {
+  listen("geo-btn", function () {
     if (!navigator.geolocation) {
       showToast("Nettleseren støtter ikke posisjonstjenester.");
       return;
